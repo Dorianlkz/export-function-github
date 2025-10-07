@@ -30,48 +30,70 @@ class SingleSheetExport implements FromArray, WithTitle
 
     /**
      * Recursively flatten the data
-     * Column A = key
-     * Column B = parent ID (only at the start of a new block)
+     * Column A = key (with indentation)
+     * Column B = parent ID (only at top of block for 'name' or 'duration_days')
      * Column C = value
      */
-    protected function flatten(array $data, array &$rows, int $level = 0, ?string $parentId = null)
+    protected function flatten(array $data, array &$rows, int $level = 0, ?string $parentId = null, bool $isTopLevel = true)
     {
         foreach ($data as $key => $value) {
-            $row = array_fill(0, $level, ''); // indentation
+            // Special handling for 'fields' array
+            if ($key === 'fields' && is_array($value)) {
+                $fieldNumber = 1;
+                foreach ($value as $fieldItem) {
+                    // Create a row for the field label
+                    $row = array_fill(0, $level, ''); // indentation
+                    $row[] = 'field ' . $fieldNumber;
+                    $row[] = ''; // parent ID column
+                    $row[] = ''; // value column (we'll put actual values in children)
+                    $rows[] = $row;
 
+                    // Flatten the field item below the field label
+                    if (is_array($fieldItem)) {
+                        $this->flatten($fieldItem, $rows, $level + 1, $parentId, true);
+                    }
+
+                    $fieldNumber++;
+                }
+                continue; // skip normal processing for 'fields' key
+            }
+
+            $row = array_fill(0, $level, ''); // indentation for Column A
             $row[] = $key;
 
-            $currentId = null;
-            if (is_array($value)) {
-                // If associative array with 'id', treat as parent
-                if (isset($value['id'])) {
-                    $currentId = (string) $value['id'];
-                    $row[] = $level === 0 ? $currentId : $parentId; // only top-level gets Column B
-                } else {
-                    $row[] = $parentId; // nested array, keep parentId
-                }
+            if ($isTopLevel && in_array($key, ['name', 'duration_days'])) {
+                $row[] = $parentId;
+            } else {
+                $row[] = '';
+            }
 
+            if (is_array($value)) {
                 $rows[] = $row;
 
+                $currentId = $parentId;
+                if (isset($value['id'])) {
+                    $currentId = (string) $value['id'];
+                }
+
                 if ($this->isAssoc($value)) {
-                    $this->flatten($value, $rows, $level + 1, $currentId ?? $parentId);
+                    $this->flatten($value, $rows, $level + 1, $currentId, true);
                 } else {
-                    // Indexed array
                     foreach ($value as $item) {
                         if (is_array($item)) {
-                            $this->flatten($item, $rows, $level + 1, $currentId ?? $parentId);
+                            $this->flatten($item, $rows, $level + 1, $currentId, true);
                         }
                     }
                 }
             } else {
-                $row[] = $parentId;
                 $row[] = $value;
                 $rows[] = $row;
 
                 if ($key === 'id') {
-                    $currentId = (string) $value;
+                    $parentId = (string) $value;
                 }
             }
+
+            $isTopLevel = false;
         }
     }
 
