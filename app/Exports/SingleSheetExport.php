@@ -29,81 +29,48 @@ class SingleSheetExport implements FromArray, WithTitle
     }
 
     /**
-     * Recursively flatten the data
-     * Column A = key (with indentation)
-     * Column B = parent ID (only at top of block for 'name' or 'duration_days')
-     * Column C = value
+     * Flatten the array and control output for Excel
+     * Column A = name / duration_days / field label / field key
+     * Column B = empty
+     * Column C = field value
      */
-    protected function flatten(array $data, array &$rows, int $level = 0, ?string $parentId = null, bool $isTopLevel = true)
+    protected function flatten(array $data, array &$rows)
     {
-        foreach ($data as $key => $value) {
-            // Special handling for 'fields' array
-            if ($key === 'fields' && is_array($value)) {
-                $fieldNumber = 1;
-                foreach ($value as $fieldItem) {
-                    // Field label row (no indentation)
-                    $row = [];
-                    $row[] = 'field ' . $fieldNumber; // Column A
-                    $row[] = ''; // Column B: parent ID
-                    $row[] = ''; // Column C: value (children come below)
-                    $rows[] = $row;
-
-                    // Flatten fieldItem with level=0 to avoid indentation
-                    if (is_array($fieldItem)) {
-                        $this->flatten($fieldItem, $rows, 0, $parentId, true);
-                    }
-
-                    $fieldNumber++;
-                }
-                continue; // skip default processing for 'fields' key
+        // Output 'name' and 'duration_days' dynamically
+        foreach (['name', 'duration_days'] as $key) {
+            if (isset($data[$key])) {
+                $rows[] = [
+                    $key, // Column A: dynamic label
+                    '', // Column B
+                    $data[$key], // Column C: actual value
+                ];
             }
+        }
 
-            // Normal processing for other keys
-            $row = array_fill(0, $level, ''); // indentation for Column A
-            $row[] = $key;
+        // Then output 'fields'
+        if (isset($data['fields']) && is_array($data['fields'])) {
+            $fieldNumber = 1;
+            foreach ($data['fields'] as $fieldItem) {
+                // Field label row
+                $rows[] = [
+                    'field ' . $fieldNumber, // Column A
+                    '', // Column B
+                    '', // Column C
+                ];
 
-            // Parent ID only for top-level 'name'/'duration_days'
-            if ($isTopLevel && in_array($key, ['name', 'duration_days'])) {
-                $row[] = $parentId;
-            } else {
-                $row[] = '';
-            }
-
-            if (is_array($value)) {
-                $rows[] = $row;
-
-                $currentId = $parentId;
-                if (isset($value['id'])) {
-                    $currentId = (string) $value['id'];
-                }
-
-                if ($this->isAssoc($value)) {
-                    $this->flatten($value, $rows, $level + 1, $currentId, true);
-                } else {
-                    foreach ($value as $item) {
-                        if (is_array($item)) {
-                            $this->flatten($item, $rows, $level + 1, $currentId, true);
-                        }
+                // Flatten each field item: output key => value directly
+                if (is_array($fieldItem)) {
+                    foreach ($fieldItem as $fKey => $fValue) {
+                        $rows[] = [
+                            $fKey, // Column A
+                            '', // Column B
+                            $fValue, // Column C
+                        ];
                     }
                 }
-            } else {
-                $row[] = $value;
-                $rows[] = $row;
 
-                if ($key === 'id') {
-                    $parentId = (string) $value;
-                }
+                $fieldNumber++;
             }
-
-            $isTopLevel = false;
         }
-    }
-
-    protected function isAssoc(array $arr): bool
-    {
-        if ([] === $arr) {
-            return false;
-        }
-        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 }
