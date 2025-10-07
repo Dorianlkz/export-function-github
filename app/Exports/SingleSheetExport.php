@@ -8,6 +8,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
 
 class SingleSheetExport implements FromArray, WithTitle, WithEvents
 {
@@ -95,35 +96,53 @@ class SingleSheetExport implements FromArray, WithTitle, WithEvents
      */
     protected function flatten(array $data, array &$rows)
     {
-        $this->addBlankRow($rows);
-        // Example styled row at top (gray)
-        $this->addStyledRow($rows, '999999');
-
-        // Name + duration_days
-        foreach (['name', 'duration_days'] as $key) {
-            if (isset($data[$key])) {
-                $rows[] = [$key, '', $data[$key]];
-            }
-        }
-
-        $this->addBlankRow($rows);
-
-        // Another styled row (yellow)
-        $this->addStyledRow($rows, '999999');
-
         if (!empty($data['fields']) && is_array($data['fields'])) {
             $fieldNumber = 1;
-            foreach ($data['fields'] as $fieldItem) {
-                $rows[] = ['field ' . $fieldNumber, '', ''];
 
-                if (is_array($fieldItem)) {
-                    foreach ($fieldItem as $fKey => $fValue) {
-                        $rows[] = [$fKey, '', $fValue];
+            foreach ($data['fields'] as $fieldItem) {
+                // Spacer after each field
+                $this->addBlankRow($rows);
+                $this->addStyledRow($rows, '999999');
+                if (!is_array($fieldItem)) {
+                    continue;
+                }
+
+                // === Parent field row ===
+                $label = $fieldItem['label'] ?? '(no label)';
+                $rows[] = [$fieldNumber . '. ' . $label];
+                $rows[] = ['Remark: ' . ($fieldItem['remark'] ?? '-')];
+                $rows[] = ['Type: ' . ($fieldItem['type'] ?? '')];
+
+                if (!empty($fieldItem['validations'])) {
+                    foreach ($fieldItem['validations'] as $validation) {
+                        $rows[] = ['Validation: ' . ($validation['type'] ?? '') . ' - ' . ($validation['message'] ?? '')];
                     }
                 }
 
-                $this->addBlankRow($rows);
-                $this->addStyledRow($rows, '999999');
+                // === If it's a QUERY_CHECKER, show options & actions ===
+                if (($fieldItem['type'] ?? '') === 'QUERY_CHECKER') {
+                    if (!empty($fieldItem['options']) && is_array($fieldItem['options'])) {
+                        foreach ($fieldItem['options'] as $optIndex => $option) {
+                            $this->addBlankRow($rows);
+                            $rows[] = ['Option ' . ($optIndex + 1) . ': ' . ($option['label'] ?? '')];
+
+                            // Actions inside option
+                            if (!empty($option['actions']) && is_array($option['actions'])) {
+                                foreach ($option['actions'] as $actIndex => $action) {
+                                    $rows[] = ['Action ' . ($actIndex + 1) . ': ' . ($action['label'] ?? '')];
+                                    $rows[] = ['Remark: ' . ($action['remark'] ?? '-')];
+                                    $rows[] = ['Type: ' . ($action['type'] ?? '')];
+
+                                    if (!empty($action['validations'])) {
+                                        foreach ($action['validations'] as $aVal) {
+                                            $rows[] = ['Validation: ' . ($aVal['type'] ?? '') . ' - ' . ($aVal['message'] ?? '')];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 $fieldNumber++;
             }
