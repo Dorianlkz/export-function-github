@@ -41,26 +41,28 @@ class SingleSheetExport implements FromArray, WithTitle
             if ($key === 'fields' && is_array($value)) {
                 $fieldNumber = 1;
                 foreach ($value as $fieldItem) {
-                    // Create a row for the field label
-                    $row = array_fill(0, $level, ''); // indentation
-                    $row[] = 'field ' . $fieldNumber;
-                    $row[] = ''; // parent ID column
-                    $row[] = ''; // value column (we'll put actual values in children)
+                    // Field label row (no indentation)
+                    $row = [];
+                    $row[] = 'field ' . $fieldNumber; // Column A
+                    $row[] = ''; // Column B: parent ID
+                    $row[] = ''; // Column C: value (children come below)
                     $rows[] = $row;
 
-                    // Flatten the field item below the field label
+                    // Flatten fieldItem with level=0 to avoid indentation
                     if (is_array($fieldItem)) {
-                        $this->flatten($fieldItem, $rows, $level + 1, $parentId, true);
+                        $this->flatten($fieldItem, $rows, 0, $parentId, true);
                     }
 
                     $fieldNumber++;
                 }
-                continue; // skip normal processing for 'fields' key
+                continue; // skip default processing for 'fields' key
             }
 
+            // Normal processing for other keys
             $row = array_fill(0, $level, ''); // indentation for Column A
             $row[] = $key;
 
+            // Parent ID only for top-level 'name'/'duration_days'
             if ($isTopLevel && in_array($key, ['name', 'duration_days'])) {
                 $row[] = $parentId;
             } else {
