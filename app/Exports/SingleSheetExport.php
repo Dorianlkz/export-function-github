@@ -47,6 +47,13 @@ class SingleSheetExport implements FromArray, WithTitle
             }
         }
 
+        // Add one empty row after each columns for spacing
+        $rows[] = [
+            '', // Column A
+            '', // Column B
+            '', // Column C
+        ];
+
         // Then output 'fields'
         if (isset($data['fields']) && is_array($data['fields'])) {
             $fieldNumber = 1;
