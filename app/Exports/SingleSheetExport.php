@@ -4,11 +4,21 @@ namespace App\Exports;
 
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
-class SingleSheetExport implements FromArray, WithTitle
+class SingleSheetExport implements FromArray, WithTitle, WithEvents
 {
     protected array $stageData;
     protected string $title;
+
+    /** styled rows [ rowNumber => ['color'=>'HEX'] ] */
+    protected array $styledRows = [];
+
+    /** fixed number of columns (A..AN = 40 cols) */
+    protected int $padCols = 40;
 
     public function __construct(array $stageData, string $title)
     {
@@ -29,59 +39,91 @@ class SingleSheetExport implements FromArray, WithTitle
     }
 
     /**
-     * Flatten the array and control output for Excel
-     * Column A = name / duration_days / field label / field key
-     * Column B = empty
-     * Column C = field value
+     * Insert a marker row and record its style info.
+     */
+    protected function addStyledRow(array &$rows, string $color = '999999'): void
+    {
+        $nbsp = html_entity_decode('&nbsp;', ENT_QUOTES, 'UTF-8');
+        $marker = array_fill(0, $this->padCols, $nbsp);
+
+        $rows[] = $marker;
+        $rowNumber = count($rows);
+
+        $this->styledRows[$rowNumber] = [
+            'color' => strtoupper(ltrim($color, '#')),
+        ];
+    }
+
+    /**
+     * Insert a visible blank row.
+     */
+    protected function addBlankRow(array &$rows): void
+    {
+        $nbsp = html_entity_decode('&nbsp;', ENT_QUOTES, 'UTF-8');
+        $rows[] = [$nbsp];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $lastColLetter = Coordinate::stringFromColumnIndex($this->padCols);
+
+                foreach ($this->styledRows as $row => $props) {
+                    $color = $props['color'] ?? '999999';
+
+                    // Apply fill from A..AN (40 cols)
+                    $sheet
+                        ->getStyle("A{$row}:{$lastColLetter}{$row}")
+                        ->getFill()
+                        ->setFillType(Fill::FILL_SOLID)
+                        ->getStartColor()
+                        ->setRGB($color);
+
+                    // Clear NBSP markers
+                    for ($col = 1; $col <= $this->padCols; $col++) {
+                        $sheet->setCellValueByColumnAndRow($col, $row, '');
+                    }
+                }
+            },
+        ];
+    }
+
+    /**
+     * Build rows.
      */
     protected function flatten(array $data, array &$rows)
     {
-        // Output 'name' and 'duration_days' dynamically
+        $this->addBlankRow($rows);
+        // Example styled row at top (gray)
+        $this->addStyledRow($rows, '999999');
+
+        // Name + duration_days
         foreach (['name', 'duration_days'] as $key) {
             if (isset($data[$key])) {
-                $rows[] = [
-                    $key, // Column A: dynamic label
-                    '', // Column B
-                    $data[$key], // Column C: actual value
-                ];
+                $rows[] = [$key, '', $data[$key]];
             }
         }
 
-        // Add one empty row after each columns for spacing
-        $rows[] = [
-            '', // Column A
-            '', // Column B
-            '', // Column C
-        ];
+        $this->addBlankRow($rows);
 
-        // Then output 'fields'
-        if (isset($data['fields']) && is_array($data['fields'])) {
+        // Another styled row (yellow)
+        $this->addStyledRow($rows, '999999');
+
+        if (!empty($data['fields']) && is_array($data['fields'])) {
             $fieldNumber = 1;
             foreach ($data['fields'] as $fieldItem) {
-                // Field label row
-                $rows[] = [
-                    'field ' . $fieldNumber, // Column A
-                    '', // Column B
-                    '', // Column C
-                ];
+                $rows[] = ['field ' . $fieldNumber, '', ''];
 
-                // Flatten each field item: output key => value directly
                 if (is_array($fieldItem)) {
                     foreach ($fieldItem as $fKey => $fValue) {
-                        $rows[] = [
-                            $fKey, // Column A
-                            '', // Column B
-                            $fValue, // Column C
-                        ];
+                        $rows[] = [$fKey, '', $fValue];
                     }
                 }
 
-                // Add one empty row after each field for spacing
-                $rows[] = [
-                    '', // Column A
-                    '', // Column B
-                    '', // Column C
-                ];
+                $this->addBlankRow($rows);
+                $this->addStyledRow($rows, '999999');
 
                 $fieldNumber++;
             }
