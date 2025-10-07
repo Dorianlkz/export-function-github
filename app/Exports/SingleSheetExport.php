@@ -69,6 +69,13 @@ class SingleSheetExport implements FromArray, WithTitle
                     }
                 }
 
+                // Add one empty row after each field for spacing
+                $rows[] = [
+                    '', // Column A
+                    '', // Column B
+                    '', // Column C
+                ];
+
                 $fieldNumber++;
             }
         }
